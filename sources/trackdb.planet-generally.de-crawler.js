@@ -4,7 +4,7 @@
 // to local directory so you can play all the tracks
 // without manually downloading.
 //
-// If you run this script again, it will look into 
+// If you run this script again, it will look into
 // trkcache.list and only download new tracks.
 //
 // Benjamin Schmidt <schmidi2@directbox.com>
@@ -17,6 +17,7 @@
 //
 
 
+var base = "http://trackdb.planet-generally.de/"
 var startpage = "http://trackdb.planet-generally.de/";
 var outdir = "tracks/trackdb.planet-generally.de/";
 var trkcache = "tracks/trackdb.planet-generally.de/trkcache.list";
@@ -25,7 +26,10 @@ var fs = require('fs');
 var crawler = require("crawler");
 var $ = require("jquery");
 
-
+var maxNavPages = 1;
+var maxTracks = 1;
+var iNavPage = 0;
+var iTrack = 0;
 
 fs.existsSync(outdir) || fs.mkdirSync(outdir);
 
@@ -58,19 +62,24 @@ var c = new crawler({
           // $("html body div#container div#outer div#inner div#content div.gallery > a")
 //          $.each( res.$("div#container div#outer div#inner div#content div.gallery > a").attr("href"), function( key, value ) {
           res.$("div#container div#outer div#inner div#content div.gallery > a").each( function( key, value ) {
-            var url = startpage +""+ value.attribs.href;
-            //c.queue(url);
+            var url = base +""+ value.attribs.href;
             // Compare with list of already downloaded !!!!
-            console.log("Add to queue (track metadata) : "+ url);
+            if(iTrack < maxTracks) {
+              c.queue(url);
+              console.log("Add to queue (track page) : "+ url);
+              iTrack++;
+            }
           });
 
+/*
           // Download link to track file
           // $("html body div#container div#outer div#inner div#content div.gallery p a[rel='nofollow']")
           res.$("div#container div#outer div#inner div#content div.gallery p a[rel='nofollow']").each( function( key, value ) {
-            var url = startpage +""+ value.attribs.href;
+            var url = base +""+ value.attribs.href;
             //cbin.queue(url);  ---> ACHTUNG REDIRECT
             console.log("Add to queue (track file) : "+ url);
           });
+*/
 
           // Add all pages of navigation to queue (just once)...
           console.log("First page : "+ res.$("a.pages_count").attr("href"));
@@ -79,23 +88,51 @@ var c = new crawler({
 
             //$.each( res.$("a.pages_count").attr("href"), function( key, value ) {
             res.$("a.pages_count").each( function( key, value ) {
-              var url = startpage +""+ value.attribs.href;
-              //c.queue(url);
-              console.log("Add to queue (nav page) : "+ url);
+              var url = base +""+ value.attribs.href;
+              if(iNavPage < maxNavPages) {
+                c.queue(url);
+                console.log("Add to queue (nav page) : "+ url);
+                iNavPage++;
+              }
             });
           }
         } else
         if(pagetitle == "Track details") {
             // Parse metadata
             // Title
-            var trktitle="":
-            // Author
-            // Date
-            // License
+            var trkTitle = res.$("table.trk_info h2").text().split(']')[1].trim();
+            var trkCat = res.$("table.trk_info h2").text().split('[')[1].split(']')[0].trim();
+            var trkDate = "";
+            var trkAuthor = "";
+            var trkLikes = "";
+            var trkVersion = "";
+            var trkLicense = "";
+            res.$("table.trk_info tbody tr td p a.tip span").each( function( key, value ) {  trkLicense += value.text() +"\n";  });
+            var trkWorldsize = res.$("table.trk_info tr td:first-child p:nth-child(2)").text().split('|')[0].split(':')[1].trim();
+            var trkLength = res.$("table.trk_info tr td:first-child p:nth-child(2)").text().split('|')[1].split(':')[1].trim();
+            var trkPhoto = base +" "+ res.$("table.trk_info a[rel='lightbox']").attr("href").trim();
+            var trkDownload = base +" "+ res.$("table.trk_info a[rel='nofollow']").attr("href").trim();
+              // Redirect to http://trackdb.planet-generally.de/include/getfile_track.php?id=761
+            var trkText = "";
+            var trkAll = res.$("table.trk_info").text(); // remove spaces / extract with html
             // OR extract html to pdf
-            console.log("New track : "+ trktitle);
+            console.log("NEW TRACK...");
+            console.log("trkTitle : "+ trkTitle);
+            console.log("trkCat : "+ trkCat);
+            console.log("trkDate : "+ trkDate);
+            console.log("trkAuthor : "+ trkAuthor);
+            console.log("trkLikes : "+ trkLikes);
+            console.log("trkVersion : "+ trkVersion);
+            console.log("trkLicense : "+ trkLicense);
+            console.log("trkWorldsize : "+ trkWorldsize);
+            console.log("trkLength : "+ trkLength);
+            console.log("trkPhoto : "+ trkPhoto);
+            console.log("trkDownload : "+ trkDownload);
+            console.log("trkText : "+ trkText);
+            console.log("trkAll : "+ trkAll);
         }
-        done();
+
+    done();
     }
 });
 
@@ -130,9 +167,12 @@ var cbin = new crawler({
 // One pdf per track and one master pdf document.
 
 
-console.log("");
-console.log("Download is successfully DONE!");
-console.log("You can find your tracks in the directory");
-console.log(outdir);
-console.log("Copy this folder to C:\\Program Files\\generally\\tracks\\");
-console.log("and have fun.");
+
+function endText() {
+  console.log("");
+  console.log("Download is successfully DONE!");
+  console.log("You can find your tracks in the directory");
+  console.log(outdir);
+  console.log("Copy this folder to C:\\Program Files\\generally\\tracks\\");
+  console.log("and have fun.");
+}
