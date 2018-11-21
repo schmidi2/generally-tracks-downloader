@@ -19,11 +19,13 @@
 
 var base = "http://trackdb.planet-generally.de/"
 var startpage = "http://trackdb.planet-generally.de/";
-var outdir = "tracks/trackdb.planet-generally.de/";
-var trkcache = "tracks/trackdb.planet-generally.de/trkcache.list";
+var outdir = "tracks/planet/";
+var trkcache = outdir + "trkcache.list";
 
 var fs = require('fs');
+var fstream = require('fstream');
 var crawler = require("crawler");
+var unzip = require("unzip");
 var $ = require("jquery");
 
 var maxNavPages = 1;
@@ -40,9 +42,9 @@ var c = new crawler({
     userAgent: "Mozilla/5.0 (X11; Fedora; Linux x86_64; rv:63.0) Gecko/20100101 Firefox/63.0",
     callback: function(err, res, done){
         if(err || res.statusCode != 200){
-          console.log("ERROR");
-          console.log("Return code: "+ res.statusCode);
-          console.log(err);
+          console.error("ERROR");
+          console.error("Return code: "+ res.statusCode);
+          console.error(err.stack);
           done();
         }
 
@@ -82,7 +84,6 @@ var c = new crawler({
 */
 
           // Add all pages of navigation to queue (just once)...
-          console.log("First page : "+ res.$("a.pages_count").attr("href"));
           if(!queuedAllNavPages) {
             queuedAllNavPages = true;
 
@@ -100,28 +101,27 @@ var c = new crawler({
         if(pagetitle == "Track details") {
             // Parse metadata
             // Title
+            var trkID = res.request.uri.href.replace(/.*id=/,'');;
             var trkTitle = res.$("table.trk_info h2").text().split(']')[1].trim();
             var trkCat = res.$("table.trk_info h2").text().split('[')[1].split(']')[0].trim();
-            var trkDate = "";
-            var trkAuthor = "";
-            var trkLikes = "";
-            var trkVersion = "";
-            var trkLicense = "";
-            res.$("table.trk_info tbody tr td p a.tip span").each( function( key, value ) {  trkLicense += value.text() +"\n";  });
+            var trkDate = res.$("table.trk_info tr:first-child td:nth-child(2) p:nth-child(2)").text().match(/[0-9]{2}\.[0-9]{2}\.[0-9]{4}/);
+            var trkAuthor = res.$("table.trk_info tr:first-child td:nth-child(2) p:nth-child(2) a").text().trim();
+            var trkVersion = res.$("table.trk_info tr:first-child td:nth-child(2) p:nth-child(2) a").text().match(/v.*$/)
+            var trkLicense = ""; //...
+            res.$("table.trk_info tbody tr td p a.tip span").each( function( key, value ) {  trkLicense += value[key].text() +"\n";  });
             var trkWorldsize = res.$("table.trk_info tr td:first-child p:nth-child(2)").text().split('|')[0].split(':')[1].trim();
             var trkLength = res.$("table.trk_info tr td:first-child p:nth-child(2)").text().split('|')[1].split(':')[1].trim();
-            var trkPhoto = base +" "+ res.$("table.trk_info a[rel='lightbox']").attr("href").trim();
-            var trkDownload = base +" "+ res.$("table.trk_info a[rel='nofollow']").attr("href").trim();
-              // Redirect to http://trackdb.planet-generally.de/include/getfile_track.php?id=761
-            var trkText = "";
-            var trkAll = res.$("table.trk_info").text(); // remove spaces / extract with html
+            var trkPhoto = base +""+ res.$("table.trk_info a[rel='lightbox']").attr("href").trim();
+            //var trkDownload = base +" "+ res.$("table.trk_info a[rel='nofollow']").attr("href").trim();  // Redirect to http://trackdb.planet-generally.de/include/getfile_track.php?id=761
+            var trkDownload = base +"include/getfile_track.php?id="+ trkID;
+            var trkText = res.$("table.trk_info tr:first-child td:nth-child(2) p:nth-child(4)").text().trim();
+            var trkAll = res.$("table.trk_info").text().trim(); // remove spaces / extract with html
             // OR extract html to pdf
             console.log("NEW TRACK...");
             console.log("trkTitle : "+ trkTitle);
             console.log("trkCat : "+ trkCat);
             console.log("trkDate : "+ trkDate);
             console.log("trkAuthor : "+ trkAuthor);
-            console.log("trkLikes : "+ trkLikes);
             console.log("trkVersion : "+ trkVersion);
             console.log("trkLicense : "+ trkLicense);
             console.log("trkWorldsize : "+ trkWorldsize);
@@ -130,6 +130,20 @@ var c = new crawler({
             console.log("trkDownload : "+ trkDownload);
             console.log("trkText : "+ trkText);
             console.log("trkAll : "+ trkAll);
+            console.log("****************");
+
+            // Write metadata to humanreadable JSON file
+            // meta/planet/<CAT>/<TRK>-meta.json
+            // If the track is stored in a zip file, extract this data
+            // and rename the files to meta/planet/<CAT>/<TRK>-<ORIGINALFILENAME>
+            //  except for the <TRK>.txt
+
+
+            // Download track...
+            var trkDir = outdir +""+ trkCat +"/";
+            fs.existsSync(trkDir) || fs.mkdirSync(trkDir);
+            var trkFilename = trkDir +""+ trkTitle +".trk";
+            cbin.queue({uri:trkDownload,filename:trkFilename});
         }
 
     done();
@@ -146,10 +160,29 @@ var cbin = new crawler({
         if(err){
             console.error(err.stack);
         }else{
-            fs.createWriteStream(res.options.filename).write(res.body);
+
+          console.log("res.options.filename: "+res.options.filename);
+
+          var attachment = res.headers['content-disposition'].replace(/.*filename=/,'');
+          var dirname = res.options.filename.replace(/[^\/]*$/,'');
+          attachment =  dirname +""+ attachment;
+
+          console.log("attachment: "+attachment);
+
+          if(attachment == "") attachment = res.options.filename;
+
+          fs.createWriteStream(attachment).write(res.body);
             // if format is zip, unpack it
             // move trk to tracks/<SOURCE>/
             // other to trackinfos/<SOURCE>/
+          if(attachment.endsWith(".zip")) {
+            var readStream = fs.createReadStream(attachment);
+            var writeStream = fstream.Writer(dirname);
+            readStream
+            .pipe(unzip.Parse())
+            .pipe(writeStream)
+          }
+
         }
         done();
     }
