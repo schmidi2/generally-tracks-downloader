@@ -13,16 +13,22 @@
 // License
 //
 // Install
-//  npm install crawler jquery
+//  npm install crawler jquery unzip
 //
 
 
 var base = "http://trackdb.planet-generally.de/"
 var startpage = "http://trackdb.planet-generally.de/";
-var outdir = "tracks/planet/";
-var trkcache = outdir + "trkcache.list";
+var trkDir = "tracks/[TRACK DB]]/";
+var trkDirByCat = "tracks/";
+var trkDirByAuthor = "tracks/";
+var photoDir = "photos/[TRACK DB]]/";
+var zipDir = "zips/[TRACK DB]]/";
+//var metaDir = "trackinfos/[TRACK DB]]/";
+var trkcache = trkDir + "trkcache.list";
 
 var fs = require('fs');
+var path = require('path');
 var fstream = require('fstream');
 var crawler = require("crawler");
 var unzip = require("unzip");
@@ -33,8 +39,13 @@ var maxTracks = 1;
 var iNavPage = 0;
 var iTrack = 0;
 
-fs.existsSync(outdir) || fs.mkdirSync(outdir);
+fs.existsSync(trkDir) || fs.mkdirSync(trkDir);
+fs.existsSync(photoDir) || fs.mkdirSync(photoDir);
+fs.existsSync(zipDir) || fs.mkdirSync(zipDir);
 
+String.prototype.startsWithI = function(s){
+    this.match(new RegExp('^'+s, 'i'));
+}
 
 var queuedAllNavPages = false;
 var c = new crawler({
@@ -101,35 +112,37 @@ var c = new crawler({
         if(pagetitle == "Track details") {
             // Parse metadata
             // Title
-            var trkID = res.request.uri.href.replace(/.*id=/,'');;
-            var trkTitle = res.$("table.trk_info h2").text().split(']')[1].trim();
-            var trkCat = res.$("table.trk_info h2").text().split('[')[1].split(']')[0].trim();
-            var trkDate = res.$("table.trk_info tr:first-child td:nth-child(2) p:nth-child(2)").text().match(/[0-9]{2}\.[0-9]{2}\.[0-9]{4}/);
-            var trkAuthor = res.$("table.trk_info tr:first-child td:nth-child(2) p:nth-child(2) a").text().trim();
-            var trkVersion = res.$("table.trk_info tr:first-child td:nth-child(2) p:nth-child(2) a").text().match(/v.*$/)
-            var trkLicense = ""; //...
-            res.$("table.trk_info tbody tr td p a.tip span").each( function( key, value ) {  trkLicense += value[key].text() +"\n";  });
-            var trkWorldsize = res.$("table.trk_info tr td:first-child p:nth-child(2)").text().split('|')[0].split(':')[1].trim();
-            var trkLength = res.$("table.trk_info tr td:first-child p:nth-child(2)").text().split('|')[1].split(':')[1].trim();
-            var trkPhoto = base +""+ res.$("table.trk_info a[rel='lightbox']").attr("href").trim();
-            //var trkDownload = base +" "+ res.$("table.trk_info a[rel='nofollow']").attr("href").trim();  // Redirect to http://trackdb.planet-generally.de/include/getfile_track.php?id=761
-            var trkDownload = base +"include/getfile_track.php?id="+ trkID;
-            var trkText = res.$("table.trk_info tr:first-child td:nth-child(2) p:nth-child(4)").text().trim();
-            var trkAll = res.$("table.trk_info").text().trim(); // remove spaces / extract with html
+            var trk = {};
+            trk.ID = res.request.uri.href.replace(/.*id=/,'');;
+            trk.Title = res.$("table.trk_info h2").text().split(']')[1].trim();
+            trk.Cat = res.$("table.trk_info h2").text().split('[')[1].split(']')[0].trim();
+            trk.Date = res.$("table.trk_info tr:first-child td:nth-child(2) p:nth-child(2)").text().match(/[0-9]{2}\.[0-9]{2}\.[0-9]{4}/);
+            trk.Author = res.$("table.trk_info tr:first-child td:nth-child(2) p:nth-child(2) a").text().trim();
+            trk.Version = res.$("table.trk_info tr:first-child td:nth-child(2) p:nth-child(2) a").text().match(/v.*$/)
+            trk.License = ""; //...
+               res.$("table.trk_info tbody tr td p a.tip span").each( function( key, value ) {  trk.trkLicense +=""+ value[key].text() +"\n";  });
+            trk.Worldsize = res.$("table.trk_info tr td:first-child p:nth-child(2)").text().split('|')[0].split(':')[1].trim();
+            trk.Length = res.$("table.trk_info tr td:first-child p:nth-child(2)").text().split('|')[1].split(':')[1].trim();
+            trk.Photo = base +""+ res.$("table.trk_info a[rel='lightbox']").attr("href").trim();
+            //trk.Download = base +" "+ res.$("table.trk_info a[rel='nofollow']").attr("href").trim();  // Redirect to http://trackdb.planet-generally.de/include/getfile_track.php?id=761
+            trk.Download = base +"include/getfile_track.php?id="+ trk.ID;
+            trk.Text = res.$("table.trk_info tr:first-child td:nth-child(2) p:nth-child(4)").text().trim();
+            trk.All = res.$("table.trk_info").text().trim(); // remove spaces / extract with html
             // OR extract html to pdf
             console.log("NEW TRACK...");
-            console.log("trkTitle : "+ trkTitle);
-            console.log("trkCat : "+ trkCat);
-            console.log("trkDate : "+ trkDate);
-            console.log("trkAuthor : "+ trkAuthor);
-            console.log("trkVersion : "+ trkVersion);
-            console.log("trkLicense : "+ trkLicense);
-            console.log("trkWorldsize : "+ trkWorldsize);
-            console.log("trkLength : "+ trkLength);
-            console.log("trkPhoto : "+ trkPhoto);
-            console.log("trkDownload : "+ trkDownload);
-            console.log("trkText : "+ trkText);
-            console.log("trkAll : "+ trkAll);
+            console.log("trk.ID : "+ trk.ID);
+            console.log("trk.Title : "+ trk.Title);
+            console.log("trk.Cat : "+ trk.Cat);
+            console.log("trk.Date : "+ trk.Date);
+            console.log("trk.Author : "+ trk.Author);
+            console.log("trk.Version : "+ trk.Version);
+            console.log("trk.License : "+ trk.License);
+            console.log("trk.Worldsize : "+ trk.Worldsize);
+            console.log("trk.Length : "+ trk.Length);
+            console.log("trk.Photo : "+ trk.Photo);
+            console.log("trk.Download : "+ trk.Download);
+            console.log("trk.Text : "+ trk.Text);
+            console.log("trk.All : "+ trk.All);
             console.log("****************");
 
             // Write metadata to humanreadable JSON file
@@ -140,10 +153,13 @@ var c = new crawler({
 
 
             // Download track...
-            var trkDir = outdir +""+ trkCat +"/";
-            fs.existsSync(trkDir) || fs.mkdirSync(trkDir);
-            var trkFilename = trkDir +""+ trkTitle +".trk";
-            cbin.queue({uri:trkDownload,filename:trkFilename});
+            var downloadFile = trkDir +""+ trk.Title +".TRK";
+            console.log("Add to b-queue (track file) : "+ trk.Download);
+            cbin.queue({uri:trk.Download,filename:downloadFile,trk});
+
+            // Download Screenshot
+            console.log("Add to b-queue (screenshot file) : "+ trk.Photo);
+            cbin.queue({uri:trk.Photo,filename:photoDir+trk.Title+".jpg",trk});
         }
 
     done();
@@ -160,27 +176,48 @@ var cbin = new crawler({
         if(err){
             console.error(err.stack);
         }else{
-
           console.log("res.options.filename: "+res.options.filename);
 
-          var attachment = res.headers['content-disposition'].replace(/.*filename=/,'');
-          var dirname = res.options.filename.replace(/[^\/]*$/,'');
-          attachment =  dirname +""+ attachment;
+          console.log(res.headers);
+          var downloadFile = ""
+          if(res.headers['content-disposition']) downloadFile = res.headers['content-disposition'].replace(/.*filename=/,'');
+          var dirname = res.options.filename.replace(/[^\/]*$/,'') +"/";
+          downloadFile =  dirname +""+ downloadFile;
+          if(downloadFile == "") downloadFile = res.options.filename;
 
-          console.log("attachment: "+attachment);
 
-          if(attachment == "") attachment = res.options.filename;
-
-          fs.createWriteStream(attachment).write(res.body);
-            // if format is zip, unpack it
-            // move trk to tracks/<SOURCE>/
-            // other to trackinfos/<SOURCE>/
-          if(attachment.endsWith(".zip")) {
-            var readStream = fs.createReadStream(attachment);
-            var writeStream = fstream.Writer(dirname);
-            readStream
-            .pipe(unzip.Parse())
-            .pipe(writeStream)
+          if(downloadFile.endsWith(".trk")) {
+            downloadFile = trkDir + path.basename(downloadFile);
+            fs.createWriteStream(downloadFile).write(res.body); // Save download
+            // var trkDirByCat = "tracks/";
+            // var trkDirByAuthor = "tracks/";
+            console.log("downloadFile: "+downloadFile);
+            console.log("trkDirByCat: "+trkDirByCat +res.options.trk.Cat+ path.basename(downloadFile));
+            console.log("trkDirByAuthor: "+trkDirByAuthor +res.options.trk.Author+ path.basename(downloadFile));
+            fs.existsSync(trkDirByCat +res.options.trk.Cat) || fs.mkdirSync(trkDirByCat +res.options.trk.Cat);
+            fs.existsSync(trkDirByAuthor +res.options.trk.Author) || fs.mkdirSync(trkDirByAuthor +res.options.trk.Author);
+            fs.copyFile(downloadFile, trkDirByCat +res.options.trk.Cat+ path.basename(downloadFile), (err) => { if (err) throw err; });
+            fs.copyFile(downloadFile, trkDirByAuthor +res.options.trk.Author+ path.basename(downloadFile), (err) => { if (err) throw err; });
+          } else
+          if(downloadFile.endsWith(".zip")) {
+            downloadFile = zipDir + path.basename(downloadFile);
+            fs.createWriteStream(downloadFile).write(res.body); // Save download
+//            fs.rename(downloadFile, downloadFile2, function (err) {            })              if(err) throw err              console.log(downloadFile +' =>'+ downloadFile2);
+            var readStream = fs.createReadStream(downloadFile).pipe(unzip.Parse())
+                  .on('entry', function (entry) {
+                    var fileName = entry.path;
+                    if(fileName.endsWith(".trk")) {
+                      downloadFile = dirname + fileName;
+                      entry.pipe(fs.createWriteStream(downloadFile));
+                      console.log("downloadFile: "+downloadFile);
+                      console.log("trkDirByCat: "+trkDirByCat +res.options.trk.Cat+ path.basename(downloadFile));
+                      console.log("trkDirByAuthor: "+trkDirByAuthor +res.options.trk.Author+ path.basename(downloadFile));
+                      fs.existsSync(trkDirByCat +res.options.trk.Cat) || fs.mkdirSync(trkDirByCat +res.options.trk.Cat);
+                      fs.existsSync(trkDirByAuthor +res.options.trk.Author) || fs.mkdirSync(trkDirByAuthor +res.options.trk.Author);
+                      fs.copyFile(downloadFile, trkDirByCat +res.options.trk.Cat+ path.basename(downloadFile), (err) => { if (err) throw err; });
+                      fs.copyFile(downloadFile, trkDirByAuthor +res.options.trk.Author+ path.basename(downloadFile), (err) => { if (err) throw err; });
+                    }
+                  });
           }
 
         }
@@ -205,7 +242,7 @@ function endText() {
   console.log("");
   console.log("Download is successfully DONE!");
   console.log("You can find your tracks in the directory");
-  console.log(outdir);
+  console.log(trkDir);
   console.log("Copy this folder to C:\\Program Files\\generally\\tracks\\");
   console.log("and have fun.");
 }
